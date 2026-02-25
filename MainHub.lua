@@ -129,6 +129,10 @@ root.BackgroundTransparency = 1
 root.BorderSizePixel = 0
 root.Parent = gui
 
+local rootScale = Instance.new("UIScale")
+rootScale.Scale = 0.84
+rootScale.Parent = root
+
 local panel = Instance.new("Frame")
 panel.Name = "Panel"
 panel.Size = UDim2.fromScale(1, 1)
@@ -160,6 +164,7 @@ title.TextXAlignment = Enum.TextXAlignment.Center
 title.Font = Enum.Font.GothamBlack
 title.TextSize = 34
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextTransparency = 1
 title.Parent = root
 
 local titleGradient = Instance.new("UIGradient")
@@ -224,10 +229,10 @@ end
 local tabBar = Instance.new("Frame")
 tabBar.Name = "TabBar"
 tabBar.AnchorPoint = Vector2.new(0.5, 0)
-tabBar.Position = UDim2.new(0.5, 0, 1, 8)
+tabBar.Position = UDim2.new(0.5, 0, 1, 24)
 tabBar.Size = UDim2.new(1, -104, 0, 46)
 tabBar.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
-tabBar.BackgroundTransparency = 0
+tabBar.BackgroundTransparency = 1
 tabBar.BorderSizePixel = 0
 tabBar.ClipsDescendants = true
 tabBar.Parent = root
@@ -239,7 +244,7 @@ tabBarCorner.Parent = tabBar
 local tabBarStroke = Instance.new("UIStroke")
 tabBarStroke.Thickness = 1
 tabBarStroke.Color = Color3.fromRGB(55, 66, 86)
-tabBarStroke.Transparency = 0.35
+tabBarStroke.Transparency = 1
 tabBarStroke.Parent = tabBar
 
 local tabBarGradient = Instance.new("UIGradient")
@@ -260,7 +265,7 @@ tabContent.ZIndex = 2
 tabContent.CanvasSize = UDim2.fromOffset(0, 0)
 tabContent.ScrollBarThickness = 3
 tabContent.ScrollBarImageColor3 = Color3.fromRGB(48, 72, 108)
-tabContent.ScrollBarImageTransparency = 0.25
+tabContent.ScrollBarImageTransparency = 1
 tabContent.ScrollingDirection = Enum.ScrollingDirection.X
 tabContent.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
 tabContent.HorizontalScrollBarInset = Enum.ScrollBarInset.ScrollBar
@@ -299,6 +304,7 @@ activeUnderline.AnchorPoint = Vector2.new(0.5, 1)
 activeUnderline.Position = UDim2.new(0, 0, 1, -1)
 activeUnderline.Size = UDim2.fromOffset(56, 2)
 activeUnderline.BackgroundColor3 = Color3.fromRGB(95, 228, 255)
+activeUnderline.BackgroundTransparency = 1
 activeUnderline.BorderSizePixel = 0
 activeUnderline.ZIndex = 6
 activeUnderline.Parent = tabOverlay
@@ -374,6 +380,7 @@ local tabButtons = {}
 local tabLabels = {}
 local tabIcons = {}
 local tabStrokes = {}
+local tabGlosses = {}
 local tabPages = {}
 local tabPageMeta = {}
 local activeTab
@@ -607,6 +614,7 @@ for index, name in ipairs(tabs) do
 	gloss.BorderSizePixel = 0
 	gloss.ZIndex = tabButton.ZIndex + 1
 	gloss.Parent = tabButton
+	tabGlosses[tabButton] = gloss
 
 	local glossCorner = Instance.new("UICorner")
 	glossCorner.CornerRadius = UDim.new(0, 5)
@@ -666,9 +674,82 @@ end
 
 updateTabCanvas()
 
+local function playOpenIntro()
+	for _, btn in ipairs(tabButtons) do
+		btn.BackgroundTransparency = 1
+		if tabLabels[btn] then
+			tabLabels[btn].TextTransparency = 1
+		end
+		if tabIcons[btn] then
+			tabIcons[btn].ImageTransparency = 1
+		end
+		if tabStrokes[btn] then
+			tabStrokes[btn].Transparency = 1
+		end
+		if tabGlosses[btn] then
+			tabGlosses[btn].BackgroundTransparency = 1
+		end
+	end
+
+	local grow = TweenService:Create(rootScale, TweenInfo.new(0.34, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 })
+	local titleIn = TweenService:Create(title, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 })
+	grow:Play()
+	titleIn:Play()
+	grow.Completed:Wait()
+
+	local barIn = TweenService:Create(
+		tabBar,
+		TweenInfo.new(0.24, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{
+			Position = UDim2.new(0.5, 0, 1, 8),
+			BackgroundTransparency = 0,
+		}
+	)
+	local strokeIn = TweenService:Create(tabBarStroke, TweenInfo.new(0.24, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Transparency = 0.35 })
+	local scrollIn = TweenService:Create(tabContent, TweenInfo.new(0.24, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { ScrollBarImageTransparency = 0.25 })
+	barIn:Play()
+	strokeIn:Play()
+	scrollIn:Play()
+
+	for i, btn in ipairs(tabButtons) do
+		task.delay(0.025 * i, function()
+			if not btn.Parent then
+				return
+			end
+			local t = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+			TweenService:Create(btn, t, { BackgroundTransparency = 0.22 }):Play()
+			if tabLabels[btn] then
+				TweenService:Create(tabLabels[btn], t, { TextTransparency = 0.22 }):Play()
+			end
+			if tabIcons[btn] then
+				TweenService:Create(tabIcons[btn], t, { ImageTransparency = 0.35 }):Play()
+			end
+			if tabStrokes[btn] then
+				TweenService:Create(tabStrokes[btn], t, { Transparency = 0.62 }):Play()
+			end
+			if tabGlosses[btn] then
+				TweenService:Create(tabGlosses[btn], t, { BackgroundTransparency = 0.9 }):Play()
+			end
+		end)
+	end
+
+	task.delay(0.2, function()
+		if not gui.Parent or not tabButtons[1] then
+			return
+		end
+		focusTabButton(tabButtons[1])
+		moveActiveUnderline(tabButtons[1], true)
+		setActiveTab(tabButtons[1])
+		task.delay(0.05, function()
+			if gui.Parent and activeTab == tabButtons[1] then
+				moveActiveUnderline(tabButtons[1], true)
+			end
+		end)
+	end)
+end
+
 if tabButtons[1] then
-	moveActiveUnderline(tabButtons[1], true)
-	setActiveTab(tabButtons[1])
+	task.defer(playOpenIntro)
 end
 
 makeDraggable(dragHandle, root)
