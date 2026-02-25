@@ -385,6 +385,7 @@ local tabPages = {}
 local tabPageMeta = {}
 local activeTab
 local switchToken = 0
+local suppressUnderlineSnapUntil = 0
 
 local contentHost = Instance.new("Frame")
 contentHost.Name = "ContentHost"
@@ -399,6 +400,9 @@ local function moveActiveUnderline(targetButton, instant)
 	if not activeUnderline or not targetButton then
 		return
 	end
+
+	activeUnderline.Visible = true
+	activeUnderline.BackgroundTransparency = 0
 
 	local width = math.clamp(targetButton.AbsoluteSize.X - 40, 34, 72)
 	local buttonCenterX = (targetButton.AbsolutePosition.X - tabBar.AbsolutePosition.X) + (targetButton.AbsoluteSize.X * 0.5)
@@ -421,11 +425,36 @@ local function moveActiveUnderline(targetButton, instant)
 		TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
 		{ Position = targetPos, Size = targetSize }
 	)
+	suppressUnderlineSnapUntil = os.clock() + 0.24
 	activeUnderlineTween:Play()
 end
 
+local function refreshUnderlineNextFrame()
+	task.defer(function()
+		if not gui.Parent then
+			return
+		end
+		RunService.Heartbeat:Wait()
+		if activeTab and activeTab.Parent then
+			moveActiveUnderline(activeTab, true)
+		end
+	end)
+end
+
 tabContent:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
-	if activeTab then
+	if activeTab and os.clock() >= suppressUnderlineSnapUntil then
+		moveActiveUnderline(activeTab, true)
+	end
+end)
+
+tabBar:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
+	if activeTab and os.clock() >= suppressUnderlineSnapUntil then
+		moveActiveUnderline(activeTab, true)
+	end
+end)
+
+tabBar:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+	if activeTab and os.clock() >= suppressUnderlineSnapUntil then
 		moveActiveUnderline(activeTab, true)
 	end
 end)
@@ -464,6 +493,7 @@ end
 local function setActiveTab(btn)
 	if activeTab == btn then
 		focusTabButton(activeTab)
+		activeUnderline.BackgroundTransparency = 0
 		moveActiveUnderline(activeTab, false)
 		return
 	end
@@ -517,10 +547,12 @@ local function setActiveTab(btn)
 			TweenService:Create(activeMeta.Info, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 }):Play()
 		end
 	end
+	activeUnderline.BackgroundTransparency = 0
 	focusTabButton(activeTab)
 	task.defer(function()
 		if activeTab == btn then
 			moveActiveUnderline(activeTab, false)
+			refreshUnderlineNextFrame()
 		end
 	end)
 end
@@ -743,6 +775,7 @@ local function playOpenIntro()
 		task.delay(0.05, function()
 			if gui.Parent and activeTab == tabButtons[1] then
 				moveActiveUnderline(tabButtons[1], true)
+				refreshUnderlineNextFrame()
 			end
 		end)
 	end)
