@@ -1,7 +1,7 @@
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
+local RunService = game:FindService("RunService")
 
-local AuroraUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/0x01125145/0X0/refs/heads/main/AuroraUI.lua"))()
+local AuroraUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/0x01125145/Aurora/main/AuroraUI.lua"))()
 
 local function getUiParent()
 	local ok, ui = pcall(function()
@@ -72,7 +72,7 @@ local function createBackground()
 		})
 	end
 
-	RunService.Heartbeat:Connect(function(dt)
+	local function updateParticles(dt)
 		if workspace.CurrentCamera then
 			viewport = workspace.CurrentCamera.ViewportSize
 		end
@@ -88,7 +88,18 @@ local function createBackground()
 			end
 			p.ui.Position = UDim2.fromOffset(p.pos.X, p.pos.Y)
 		end
-	end)
+	end
+
+	if RunService and RunService.Heartbeat then
+		RunService.Heartbeat:Connect(updateParticles)
+	else
+		task.spawn(function()
+			while screenGui.Parent do
+				updateParticles(1 / 60)
+				task.wait(1 / 60)
+			end
+		end)
+	end
 end
 
 createBackground()
