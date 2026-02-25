@@ -83,6 +83,28 @@ local function makeDraggable(handle, target)
 	end)
 end
 
+local animatedGradients = {}
+
+local function trackAnimatedGradient(gradient, phaseShift)
+	if gradient then
+		table.insert(animatedGradients, {
+			gradient = gradient,
+			phaseShift = phaseShift or 0,
+		})
+	end
+	return gradient
+end
+
+local function getTabCycleColors()
+	return ColorSequence.new({
+		ColorSequenceKeypoint.new(0.00, Color3.fromRGB(90, 255, 170)),  -- green
+		ColorSequenceKeypoint.new(0.28, Color3.fromRGB(245, 235, 105)), -- yellow
+		ColorSequenceKeypoint.new(0.56, Color3.fromRGB(90, 220, 255)),  -- cyan
+		ColorSequenceKeypoint.new(0.82, Color3.fromRGB(125, 155, 255)), -- blue
+		ColorSequenceKeypoint.new(1.00, Color3.fromRGB(90, 255, 170)),  -- back to green
+	})
+end
+
 local uiParent = getUiParent()
 local Icons = loadIconRegistry()
 local old = uiParent:FindFirstChild("AURORA_MainHub")
@@ -148,6 +170,7 @@ titleGradient.Color = ColorSequence.new({
 	ColorSequenceKeypoint.new(1, Color3.fromRGB(90, 255, 170)),
 })
 titleGradient.Parent = title
+trackAnimatedGradient(titleGradient)
 
 local dragHandle = Instance.new("Frame")
 dragHandle.Name = "DragHandle"
@@ -246,6 +269,14 @@ tabContent.ScrollingEnabled = true
 tabContent.ElasticBehavior = Enum.ElasticBehavior.Never
 tabContent.Parent = tabBar
 
+local tabOverlay = Instance.new("Frame")
+tabOverlay.Name = "TabOverlay"
+tabOverlay.Size = UDim2.fromScale(1, 1)
+tabOverlay.BackgroundTransparency = 1
+tabOverlay.BorderSizePixel = 0
+tabOverlay.ZIndex = 6
+tabOverlay.Parent = tabBar
+
 local tabLayout = Instance.new("UIListLayout")
 tabLayout.FillDirection = Enum.FillDirection.Horizontal
 tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
@@ -258,6 +289,27 @@ local tabPadding = Instance.new("UIPadding")
 tabPadding.PaddingLeft = UDim.new(0, 8)
 tabPadding.PaddingRight = UDim.new(0, 8)
 tabPadding.Parent = tabContent
+
+local activeUnderline
+local activeUnderlineTween
+
+activeUnderline = Instance.new("Frame")
+activeUnderline.Name = "ActiveUnderline"
+activeUnderline.AnchorPoint = Vector2.new(0.5, 1)
+activeUnderline.Position = UDim2.new(0, 0, 1, -1)
+activeUnderline.Size = UDim2.fromOffset(56, 2)
+activeUnderline.BackgroundColor3 = Color3.fromRGB(95, 228, 255)
+activeUnderline.BorderSizePixel = 0
+activeUnderline.ZIndex = 6
+activeUnderline.Parent = tabOverlay
+
+local activeUnderlineGradient = Instance.new("UIGradient")
+activeUnderlineGradient.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 255, 170)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(90, 220, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(125, 155, 255)),
+})
+activeUnderlineGradient.Parent = activeUnderline
 
 local function updateTabCanvas()
 	local contentWidth = tabLayout.AbsoluteContentSize.X + tabPadding.PaddingLeft.Offset + tabPadding.PaddingRight.Offset
@@ -309,19 +361,19 @@ for _ = 1, 22 do
 	})
 end
 
-local tabs = { "Main", "Autofarm", "Teleport", "Player", "Settings" }
+local tabs = { "Main", "Autofarm", "Teleport", "Player", "Settings", "Test" }
 local tabIconKeys = {
 	Main = "lucide-home",
 	Autofarm = "lucide-play-circle",
 	Teleport = "lucide-map-pin",
 	Player = "lucide-user",
 	Settings = "lucide-settings",
+	Test = "lucide-flask-round",
 }
 local tabButtons = {}
 local tabLabels = {}
 local tabIcons = {}
 local tabStrokes = {}
-local tabUnderlines = {}
 local tabPages = {}
 local tabPageMeta = {}
 local activeTab
@@ -336,7 +388,79 @@ contentHost.BorderSizePixel = 0
 contentHost.ZIndex = 4
 contentHost.Parent = panel
 
+local function moveActiveUnderline(targetButton, instant)
+	if not activeUnderline or not targetButton then
+		return
+	end
+
+	local width = math.clamp(targetButton.AbsoluteSize.X - 40, 34, 72)
+	local buttonCenterX = (targetButton.AbsolutePosition.X - tabBar.AbsolutePosition.X) + (targetButton.AbsoluteSize.X * 0.5)
+	local targetPos = UDim2.new(0, buttonCenterX, 1, -1)
+	local targetSize = UDim2.fromOffset(width, 2)
+
+	if activeUnderlineTween then
+		activeUnderlineTween:Cancel()
+		activeUnderlineTween = nil
+	end
+
+	if instant then
+		activeUnderline.Position = targetPos
+		activeUnderline.Size = targetSize
+		return
+	end
+
+	activeUnderlineTween = TweenService:Create(
+		activeUnderline,
+		TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+		{ Position = targetPos, Size = targetSize }
+	)
+	activeUnderlineTween:Play()
+end
+
+tabContent:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+	if activeTab then
+		moveActiveUnderline(activeTab, true)
+	end
+end)
+
+local function focusTabButton(targetButton)
+	if not targetButton or not targetButton.Parent then
+		return
+	end
+
+	local buttonLeft = (targetButton.AbsolutePosition.X - tabContent.AbsolutePosition.X) + tabContent.CanvasPosition.X
+	local buttonRight = buttonLeft + targetButton.AbsoluteSize.X
+	local viewLeft = tabContent.CanvasPosition.X
+	local viewRight = viewLeft + tabContent.AbsoluteSize.X
+	local targetX = viewLeft
+
+	if buttonLeft < viewLeft then
+		targetX = buttonLeft - 8
+	elseif buttonRight > viewRight then
+		targetX = buttonRight - tabContent.AbsoluteSize.X + 8
+	end
+
+	local maxX = math.max(0, tabContent.CanvasSize.X.Offset - tabContent.AbsoluteSize.X)
+	targetX = math.clamp(targetX, 0, maxX)
+
+	if math.abs(targetX - tabContent.CanvasPosition.X) < 1 then
+		return
+	end
+
+	TweenService:Create(
+		tabContent,
+		TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ CanvasPosition = Vector2.new(targetX, 0) }
+	):Play()
+end
+
 local function setActiveTab(btn)
+	if activeTab == btn then
+		focusTabButton(activeTab)
+		moveActiveUnderline(activeTab, false)
+		return
+	end
+
 	switchToken = switchToken + 1
 	local token = switchToken
 
@@ -350,9 +474,6 @@ local function setActiveTab(btn)
 		end
 		if tabStrokes[activeTab] then
 			tabStrokes[activeTab].Transparency = 0.62
-		end
-		if tabUnderlines[activeTab] then
-			tabUnderlines[activeTab].BackgroundTransparency = 1
 		end
 		if tabPages[activeTab] then
 			local oldMeta = tabPageMeta[activeTab]
@@ -379,9 +500,6 @@ local function setActiveTab(btn)
 	if tabStrokes[activeTab] then
 		tabStrokes[activeTab].Transparency = 0.2
 	end
-	if tabUnderlines[activeTab] then
-		tabUnderlines[activeTab].BackgroundTransparency = 0
-	end
 	if tabPages[activeTab] then
 		local activeMeta = tabPageMeta[activeTab]
 		tabPages[activeTab].Visible = true
@@ -392,9 +510,16 @@ local function setActiveTab(btn)
 			TweenService:Create(activeMeta.Info, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0 }):Play()
 		end
 	end
+	focusTabButton(activeTab)
+	task.defer(function()
+		if activeTab == btn then
+			moveActiveUnderline(activeTab, false)
+		end
+	end)
 end
 
 for index, name in ipairs(tabs) do
+	local tabPhaseStep = 2 / #tabs
 	local buttonWidth = getTabButtonWidth(name)
 	local tabButton = Instance.new("TextButton")
 	tabButton.Name = name .. "Tab"
@@ -447,13 +572,10 @@ for index, name in ipairs(tabs) do
 
 	local iconGradient = Instance.new("UIGradient")
 	iconGradient.Rotation = 0
-	iconGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 255, 170)),
-		ColorSequenceKeypoint.new(0.34, Color3.fromRGB(90, 220, 255)),
-		ColorSequenceKeypoint.new(0.68, Color3.fromRGB(125, 155, 255)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(90, 255, 170)),
-	})
+	iconGradient.Color = getTabCycleColors()
 	iconGradient.Parent = icon
+	local tabPhaseShift = (index - 1) * tabPhaseStep
+	trackAnimatedGradient(iconGradient, tabPhaseShift)
 	tabIcons[tabButton] = icon
 
 	local tabText = Instance.new("TextLabel")
@@ -472,13 +594,9 @@ for index, name in ipairs(tabs) do
 
 	local tabTextGradient = Instance.new("UIGradient")
 	tabTextGradient.Rotation = 0
-	tabTextGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 255, 170)),
-		ColorSequenceKeypoint.new(0.34, Color3.fromRGB(90, 220, 255)),
-		ColorSequenceKeypoint.new(0.68, Color3.fromRGB(125, 155, 255)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(90, 255, 170)),
-	})
+	tabTextGradient.Color = getTabCycleColors()
 	tabTextGradient.Parent = tabText
+	trackAnimatedGradient(tabTextGradient, tabPhaseShift)
 
 	local gloss = Instance.new("Frame")
 	gloss.Name = "Gloss"
@@ -501,26 +619,6 @@ for index, name in ipairs(tabs) do
 		NumberSequenceKeypoint.new(1, 1),
 	})
 	glossGradient.Parent = gloss
-
-	local underline = Instance.new("Frame")
-	underline.Name = "Underline"
-	underline.AnchorPoint = Vector2.new(0.5, 1)
-	underline.Position = UDim2.new(0.5, 0, 1, -1)
-	underline.Size = UDim2.fromOffset(math.clamp(buttonWidth - 40, 34, 72), 2)
-	underline.BackgroundColor3 = Color3.fromRGB(95, 228, 255)
-	underline.BackgroundTransparency = 1
-	underline.BorderSizePixel = 0
-	underline.ZIndex = tabButton.ZIndex + 2
-	underline.Parent = tabButton
-
-	local underlineGradient = Instance.new("UIGradient")
-	underlineGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 255, 170)),
-		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(90, 220, 255)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(125, 155, 255)),
-	})
-	underlineGradient.Parent = underline
-	tabUnderlines[tabButton] = underline
 
 	local page = Instance.new("Frame")
 	page.Name = name .. "Page"
@@ -569,12 +667,14 @@ end
 updateTabCanvas()
 
 if tabButtons[1] then
+	moveActiveUnderline(tabButtons[1], true)
 	setActiveTab(tabButtons[1])
 end
 
 makeDraggable(dragHandle, root)
 
 local conn
+local gradientPhase = 0
 conn = RunService.Heartbeat:Connect(function(dt)
 	if not gui.Parent then
 		if conn then
@@ -619,6 +719,16 @@ conn = RunService.Heartbeat:Connect(function(dt)
 				p.pos = Vector2.new(p.pos.X, math.clamp(p.pos.Y, 0, tabPanelSize.Y))
 			end
 			p.ui.Position = UDim2.fromOffset(p.pos.X, p.pos.Y)
+		end
+	end
+
+	gradientPhase = (gradientPhase + dt * 0.65) % 2
+	local offsetX = gradientPhase - 1
+	for _, entry in ipairs(animatedGradients) do
+		local gradient = entry.gradient
+		if gradient and gradient.Parent then
+			local shifted = ((gradientPhase + entry.phaseShift) % 2) - 1
+			gradient.Offset = Vector2.new(shifted, 0)
 		end
 	end
 end)
