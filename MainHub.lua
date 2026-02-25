@@ -422,10 +422,10 @@ local function moveActiveUnderline(targetButton, instant)
 
 	activeUnderlineTween = TweenService:Create(
 		activeUnderline,
-		TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+		TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
 		{ Position = targetPos, Size = targetSize }
 	)
-	suppressUnderlineSnapUntil = os.clock() + 0.24
+	suppressUnderlineSnapUntil = os.clock() + 0.32
 	activeUnderlineTween:Play()
 end
 
@@ -552,7 +552,6 @@ local function setActiveTab(btn)
 	task.defer(function()
 		if activeTab == btn then
 			moveActiveUnderline(activeTab, false)
-			refreshUnderlineNextFrame()
 		end
 	end)
 end
