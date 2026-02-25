@@ -400,6 +400,12 @@ local function moveActiveUnderline(targetButton, instant)
 	if not activeUnderline or not targetButton then
 		return
 	end
+	if not targetButton:IsDescendantOf(gui) then
+		return
+	end
+	if tabBar.AbsoluteSize.X < 1 or targetButton.AbsoluteSize.X < 1 then
+		return
+	end
 
 	activeUnderline.Visible = true
 	activeUnderline.BackgroundTransparency = 0
@@ -420,11 +426,19 @@ local function moveActiveUnderline(targetButton, instant)
 		return
 	end
 
-	activeUnderlineTween = TweenService:Create(
-		activeUnderline,
-		TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-		{ Position = targetPos, Size = targetSize }
-	)
+	local ok, tween = pcall(function()
+		return TweenService:Create(
+			activeUnderline,
+			TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+			{ Position = targetPos, Size = targetSize }
+		)
+	end)
+	if not ok or not tween then
+		activeUnderline.Position = targetPos
+		activeUnderline.Size = targetSize
+		return
+	end
+	activeUnderlineTween = tween
 	suppressUnderlineSnapUntil = os.clock() + 0.32
 	activeUnderlineTween:Play()
 end
@@ -442,12 +456,6 @@ local function refreshUnderlineNextFrame()
 end
 
 tabContent:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
-	if activeTab and os.clock() >= suppressUnderlineSnapUntil then
-		moveActiveUnderline(activeTab, true)
-	end
-end)
-
-tabBar:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
 	if activeTab and os.clock() >= suppressUnderlineSnapUntil then
 		moveActiveUnderline(activeTab, true)
 	end
