@@ -1,5 +1,5 @@
 local Players = game:GetService("Players")
-local RunService = game:FindService("RunService")
+local RunService = game:GetService("RunService")
 
 local AuroraUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/0x01125145/Aurora/main/AuroraUI.lua"))()
 
@@ -15,19 +15,27 @@ end
 
 local function createBackground()
 	local uiParent = getUiParent()
-	local screenGui = Instance.new("ScreenGui")
-	screenGui.Name = "AURORA_HubBackground"
-	screenGui.IgnoreGuiInset = true
-	screenGui.ResetOnSpawn = false
-	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	screenGui.DisplayOrder = -100
-	screenGui.Parent = uiParent
+	local oldBack = uiParent:FindFirstChild("AURORA_HubBackground")
+	if oldBack then
+		oldBack:Destroy()
+	end
+	local oldOverlay = uiParent:FindFirstChild("AURORA_HubOverlay")
+	if oldOverlay then
+		oldOverlay:Destroy()
+	end
+	local backGui = Instance.new("ScreenGui")
+	backGui.Name = "AURORA_HubBackground"
+	backGui.IgnoreGuiInset = true
+	backGui.ResetOnSpawn = false
+	backGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	backGui.DisplayOrder = 0
+	backGui.Parent = uiParent
 
 	local background = Instance.new("Frame")
 	background.Size = UDim2.fromScale(1, 1)
 	background.BackgroundColor3 = Color3.fromRGB(5, 5, 5)
 	background.BorderSizePixel = 0
-	background.Parent = screenGui
+	background.Parent = backGui
 
 	local gradient = Instance.new("UIGradient")
 	gradient.Rotation = 90
@@ -42,7 +50,8 @@ local function createBackground()
 	particleLayer.Size = UDim2.fromScale(1, 1)
 	particleLayer.BackgroundTransparency = 1
 	particleLayer.BorderSizePixel = 0
-	particleLayer.Parent = background
+	particleLayer.Active = false
+	particleLayer.Parent = backGui
 
 	local particles = {}
 	local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
@@ -50,10 +59,14 @@ local function createBackground()
 		local dot = Instance.new("Frame")
 		local s = math.random(1, 3)
 		dot.Size = UDim2.fromOffset(s, s)
-		dot.Position = UDim2.fromOffset(math.random(0, viewport.X), math.random(0, viewport.Y))
+		dot.Position = UDim2.fromOffset(
+			math.random(0, math.max(1, math.floor(viewport.X))),
+			math.random(0, math.max(1, math.floor(viewport.Y)))
+		)
 		dot.BackgroundColor3 = Color3.fromRGB(210, 210, 210)
 		dot.BackgroundTransparency = math.random(58, 86) / 100
 		dot.BorderSizePixel = 0
+		dot.Active = false
 		dot.Parent = particleLayer
 
 		local corner = Instance.new("UICorner")
@@ -94,7 +107,7 @@ local function createBackground()
 		RunService.Heartbeat:Connect(updateParticles)
 	else
 		task.spawn(function()
-			while screenGui.Parent do
+			while backGui.Parent do
 				updateParticles(1 / 60)
 				task.wait(1 / 60)
 			end
@@ -110,6 +123,99 @@ ui:CreateWindow({
 	SubTitle = "Custom Main Hub",
 	Size = UDim2.fromOffset(560, 360),
 })
+ui.Gui.DisplayOrder = 100
+
+local function createHubTopOverlay(root)
+	local existing = root:FindFirstChild("AURORA_HubTopOverlay")
+	if existing then
+		existing:Destroy()
+	end
+
+	local overlay = Instance.new("Frame")
+	overlay.Name = "AURORA_HubTopOverlay"
+	overlay.Size = UDim2.fromScale(1, 1)
+	overlay.BackgroundTransparency = 1
+	overlay.BorderSizePixel = 0
+	overlay.ZIndex = 50
+	overlay.Active = false
+	overlay.Parent = root
+
+	local particles = {}
+	local absoluteSize = root.AbsoluteSize
+
+	for _ = 1, 22 do
+		local dot = Instance.new("Frame")
+		local s = math.random(1, 2)
+		dot.Size = UDim2.fromOffset(s, s)
+		dot.Position = UDim2.fromOffset(
+			math.random(0, math.max(1, math.floor(absoluteSize.X))),
+			math.random(0, math.max(1, math.floor(absoluteSize.Y)))
+		)
+		dot.BackgroundColor3 = Color3.fromRGB(235, 240, 255)
+		dot.BackgroundTransparency = math.random(72, 90) / 100
+		dot.BorderSizePixel = 0
+		dot.ZIndex = 51
+		dot.Active = false
+		dot.Parent = overlay
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(1, 0)
+		corner.Parent = dot
+
+		local v = Vector2.new(math.random(-100, 100), math.random(-100, 100))
+		if v.Magnitude < 0.01 then
+			v = Vector2.new(1, 0)
+		end
+
+		table.insert(particles, {
+			ui = dot,
+			pos = Vector2.new(dot.Position.X.Offset, dot.Position.Y.Offset),
+			vel = v.Unit * math.random(5, 13),
+		})
+	end
+
+	local function updateHubParticles(dt)
+		if not overlay.Parent then
+			return
+		end
+
+		local sz = root.AbsoluteSize
+		for _, p in ipairs(particles) do
+			p.pos += p.vel * dt
+			if p.pos.X < 0 or p.pos.X > sz.X then
+				p.vel = Vector2.new(-p.vel.X, p.vel.Y)
+				p.pos = Vector2.new(math.clamp(p.pos.X, 0, sz.X), p.pos.Y)
+			end
+			if p.pos.Y < 0 or p.pos.Y > sz.Y then
+				p.vel = Vector2.new(p.vel.X, -p.vel.Y)
+				p.pos = Vector2.new(p.pos.X, math.clamp(p.pos.Y, 0, sz.Y))
+			end
+			p.ui.Position = UDim2.fromOffset(p.pos.X, p.pos.Y)
+		end
+	end
+
+	if RunService and RunService.Heartbeat then
+		local conn
+		conn = RunService.Heartbeat:Connect(function(dt)
+			if not overlay.Parent then
+				if conn then
+					conn:Disconnect()
+				end
+				return
+			end
+			updateHubParticles(dt)
+		end)
+	else
+		task.spawn(function()
+			while overlay.Parent do
+				updateHubParticles(1 / 60)
+				task.wait(1 / 60)
+			end
+		end)
+	end
+end
+
+createHubTopOverlay(ui.Root)
 
 local mainTab = ui:AddTab({ Title = "Main" })
 local combatTab = ui:AddTab({ Title = "Combat" })
